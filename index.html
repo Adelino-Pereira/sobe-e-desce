@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#173d32" />
+    <meta
+      name="description"
+      content="Uma aplicação simples para registar a pontuação do Sobe&Desce."
+    />
+    <title>Sobe&Desce</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="setup-screen" class="screen setup-screen" aria-labelledby="setup-title">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="brand-card brand-card--back"></span>
+          <span class="brand-card brand-card--front">♠</span>
+        </div>
+        <p class="eyebrow">Registo de pontuação</p>
+        <h1 id="setup-title">Sobe&Desce</h1>
+        <p class="intro">Adiciona os jogadores.</p>
+
+        <form id="setup-form" class="setup-card" novalidate>
+          <div class="field-group">
+            <label for="player-count">Quantos jogadores?</label>
+            <div class="select-wrap">
+              <select id="player-count" name="player-count">
+                <option value="2">2 jogadores</option>
+                <option value="3" selected>3 jogadores</option>
+                <option value="4">4 jogadores</option>
+                <option value="5">5 jogadores</option>
+                <option value="6">6 jogadores</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset class="names-fieldset">
+            <legend>Nomes dos jogadores</legend>
+            <div id="player-name-fields" class="player-name-fields"></div>
+          </fieldset>
+
+          <p id="setup-error" class="form-message" role="alert" hidden></p>
+          <button class="button button--primary button--large" type="submit">
+            Começar Jogo <span aria-hidden="true">→</span>
+          </button>
+        </form>
+      </section>
+
+      <section id="game-screen" class="screen game-screen" aria-labelledby="game-title" hidden>
+        <header class="game-header">
+          <div>
+            <p class="eyebrow">Sobe&Desce</p>
+            <h1 id="game-title">Ronda <span id="round-number">1</span></h1>
+          </div>
+          <button id="new-game-button" class="icon-button" type="button" aria-label="Começar um novo jogo" title="Começar um novo jogo">
+            ↻
+          </button>
+        </header>
+
+        <section class="suit-panel" aria-labelledby="suit-title">
+          <div class="section-heading">
+            <div>
+              <p class="step-label">1</p>
+              <h2 id="suit-title">Escolhe o trunfo</h2>
+            </div>
+            <span id="round-status" class="status-pill">Não iniciada</span>
+          </div>
+
+          <div id="suit-picker" class="suit-picker" role="radiogroup" aria-label="Trunfo desta ronda">
+            <button class="suit-button suit-button--black" type="button" data-suit="spades" role="radio" aria-checked="false" disabled>
+              <span class="suit-symbol" aria-hidden="true">♠</span>
+              <span>Espadas</span>
+            </button>
+            <button class="suit-button suit-button--red" type="button" data-suit="hearts" role="radio" aria-checked="false" disabled>
+              <span class="suit-symbol" aria-hidden="true">♥</span>
+              <span>Copas</span>
+              <small>×2</small>
+            </button>
+            <button class="suit-button suit-button--black" type="button" data-suit="clubs" role="radio" aria-checked="false" disabled>
+              <span class="suit-symbol" aria-hidden="true">♣</span>
+              <span>Paus</span>
+              <small>Não pode passar</small>
+            </button>
+            <button class="suit-button suit-button--red" type="button" data-suit="diamonds" role="radio" aria-checked="false" disabled>
+              <span class="suit-symbol" aria-hidden="true">♦</span>
+              <span>Ouros</span>
+            </button>
+          </div>
+          <p id="suit-hint" class="panel-hint">Começa a ronda para desbloquear a escolha do trunfo.</p>
+        </section>
+
+        <section class="scores-section" aria-labelledby="scores-title">
+          <div class="section-heading section-heading--scores">
+            <div>
+              <p class="step-label">2</p>
+              <h2 id="scores-title">Regista as vazas</h2>
+            </div>
+            <div id="trick-counter" class="trick-counter" aria-live="polite">
+              <strong>0</strong><span>/ 5 vazas</span>
+            </div>
+          </div>
+          <div id="player-cards" class="player-cards"></div>
+          <p id="round-message" class="round-message" aria-live="polite">Começa a ronda quando estiver tudo pronto.</p>
+        </section>
+
+        <div class="action-bar">
+          <button id="start-round-button" class="button button--primary button--large" type="button">Começar ronda</button>
+          <button id="update-scores-button" class="button button--accent button--large" type="button" hidden disabled>Atualizar pontuação</button>
+        </div>
+      </section>
+
+      <dialog id="winner-dialog" class="winner-dialog">
+        <div class="winner-icon" aria-hidden="true">♛</div>
+        <p class="eyebrow">Fim do jogo</p>
+        <h2 id="winner-title">Temos vencedor!</h2>
+        <p id="winner-message"></p>
+        <div class="dialog-actions">
+          <button id="winner-new-game" class="button button--primary button--large" type="button">Novo jogo</button>
+          <button id="winner-close" class="button button--ghost" type="button">Ver quadro de pontuação</button>
+        </div>
+      </dialog>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
