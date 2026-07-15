@@ -65,6 +65,7 @@ assert(setup.scores.join(",") === "20,20", "Every player should start at 20 poin
 const heartRound = await evaluate(`(() => {
   document.querySelector("#start-round-button").click();
   document.querySelector('[data-suit="hearts"]').click();
+  const keyboardAvoided = !document.activeElement.classList.contains("trick-input");
   const inputs = document.querySelectorAll(".trick-input");
   inputs[0].value = "2";
   inputs[0].dispatchEvent(new Event("input", { bubbles: true }));
@@ -72,6 +73,7 @@ const heartRound = await evaluate(`(() => {
   const canUpdate = !document.querySelector("#update-scores-button").disabled;
   document.querySelector("#update-scores-button").click();
   return {
+    keyboardAvoided,
     autoCompleted,
     canUpdate,
     scores: [...document.querySelectorAll(".score-value")].map((node) => node.textContent),
@@ -79,6 +81,7 @@ const heartRound = await evaluate(`(() => {
   };
 })()`);
 
+assert(heartRound.keyboardAvoided, "Choosing a suit should not focus a trick input or open the mobile keyboard.");
 assert(heartRound.autoCompleted === "3", "A 2/3 split should autocomplete the second player to 3.");
 assert(heartRound.canUpdate, "Exactly five assigned tricks should enable score updates.");
 assert(heartRound.scores.join(",") === "16,14", "Hearts should double the deductions to 4 and 6.");

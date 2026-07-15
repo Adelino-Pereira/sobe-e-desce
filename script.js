@@ -232,7 +232,6 @@ function chooseSuit(suit) {
 
   autoCompleteTricks();
   renderGame();
-  playerCards.querySelector(".trick-input:not(:disabled)")?.focus();
 }
 
 function handleTrickInput(playerId, rawValue) {
