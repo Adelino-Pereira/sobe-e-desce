@@ -96,6 +96,7 @@ const clubRound = await evaluate(`(() => {
   return {
     passDisabled,
     autoCompleted,
+    correctionAvailable: !document.querySelector("#undo-round-button").hidden,
     scores: [...document.querySelectorAll(".score-value")].map((node) => node.textContent),
   };
 })()`);
@@ -103,7 +104,59 @@ const clubRound = await evaluate(`(() => {
 assert(clubRound.passDisabled, "Clubs should disable every pass button.");
 assert(clubRound.autoCompleted === "5", "A zero should autocomplete the other player to five.");
 assert(clubRound.scores.join(",") === "21,9", "Normal scoring should add 5 for zero and deduct tricks won.");
+assert(clubRound.correctionAvailable, "The last scored round should be available for correction.");
 
-console.log("Browser smoke test passed: setup, autocomplete, hearts, clubs, and round locking.");
+const correctedRound = await evaluate(`(() => {
+  document.querySelector("#start-round-button").click();
+  document.querySelector('[data-suit="diamonds"]').click();
+  const newRoundInputs = document.querySelectorAll(".trick-input");
+  newRoundInputs[0].value = "4";
+  newRoundInputs[0].dispatchEvent(new Event("input", { bubbles: true }));
+  window.confirm = () => true;
+  document.querySelector("#undo-round-button").click();
+
+  const restoredInputs = document.querySelectorAll(".trick-input");
+  const restored = {
+    round: document.querySelector("#round-number").textContent,
+    suit: document.querySelector('[data-suit="clubs"]').getAttribute("aria-checked"),
+    tricks: [...restoredInputs].map((input) => input.value),
+    scores: [...document.querySelectorAll(".score-value")].map((node) => node.textContent),
+    correctionConsumed: document.querySelector("#undo-round-button").hidden,
+  };
+
+  restoredInputs[0].value = "1";
+  restoredInputs[0].dispatchEvent(new Event("input", { bubbles: true }));
+  document.querySelector("#update-scores-button").click();
+  return {
+    ...restored,
+    correctedTricks: [...restoredInputs].map((input) => input.value),
+    correctedScores: [...document.querySelectorAll(".score-value")].map((node) => node.textContent),
+  };
+})()`);
+
+assert(correctedRound.round === "2", "Correction should return to the last scored round.");
+assert(correctedRound.suit === "true", "Correction should restore the round suit.");
+assert(correctedRound.tricks.join(",") === "0,5", "Correction should restore the submitted tricks.");
+assert(correctedRound.scores.join(",") === "16,14", "Correction should restore scores from before the update.");
+assert(correctedRound.correctionConsumed, "The undo should be consumed until corrected scores are applied.");
+assert(correctedRound.correctedTricks.join(",") === "1,4", "Editing a restored round should recalculate autocompleted tricks.");
+assert(correctedRound.correctedScores.join(",") === "15,10", "Reapplying the corrected round should use the restored scores.");
+
+const immediateCorrection = await evaluate(`(() => {
+  document.querySelector("#undo-round-button").click();
+  return {
+    round: document.querySelector("#round-number").textContent,
+    suit: document.querySelector('[data-suit="clubs"]').getAttribute("aria-checked"),
+    tricks: [...document.querySelectorAll(".trick-input")].map((input) => input.value),
+    scores: [...document.querySelectorAll(".score-value")].map((node) => node.textContent),
+  };
+})()`);
+
+assert(immediateCorrection.round === "2", "Immediate correction should reopen the scored round.");
+assert(immediateCorrection.suit === "true", "Immediate correction should retain the submitted suit.");
+assert(immediateCorrection.tricks.join(",") === "1,4", "Immediate correction should retain the corrected tricks.");
+assert(immediateCorrection.scores.join(",") === "16,14", "Immediate correction should restore the prior scores.");
+
+console.log("Browser smoke test passed: setup, scoring, locking, and last-round correction.");
 await command("Page.close");
 socket.close();

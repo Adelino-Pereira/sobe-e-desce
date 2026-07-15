@@ -59,6 +59,11 @@
           </button>
         </header>
 
+        <button id="undo-round-button" class="undo-round-button" type="button" hidden>
+          <span aria-hidden="true">↶</span>
+          Corrigir última ronda
+        </button>
+
         <section class="suit-panel" aria-labelledby="suit-title">
           <div class="section-heading">
             <div>
@@ -117,6 +122,7 @@
         <h2 id="winner-title">Temos vencedor!</h2>
         <p id="winner-message"></p>
         <div class="dialog-actions">
+          <button id="winner-undo-round" class="button button--accent button--large" type="button">Corrigir última ronda</button>
           <button id="winner-new-game" class="button button--primary button--large" type="button">Novo jogo</button>
           <button id="winner-close" class="button button--ghost" type="button">Ver quadro de pontuação</button>
         </div>

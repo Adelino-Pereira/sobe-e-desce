@@ -23,16 +23,19 @@ const roundMessage = document.querySelector("#round-message");
 const startRoundButton = document.querySelector("#start-round-button");
 const updateScoresButton = document.querySelector("#update-scores-button");
 const newGameButton = document.querySelector("#new-game-button");
+const undoRoundButton = document.querySelector("#undo-round-button");
 const winnerDialog = document.querySelector("#winner-dialog");
 const winnerTitle = document.querySelector("#winner-title");
 const winnerMessage = document.querySelector("#winner-message");
 const winnerNewGame = document.querySelector("#winner-new-game");
 const winnerClose = document.querySelector("#winner-close");
+const winnerUndoRound = document.querySelector("#winner-undo-round");
 
 let players = [];
 let currentRound = 1;
 let phase = "idle";
 let selectedSuit = null;
+let lastScoredRound = null;
 
 function renderNameFields() {
   const count = Number(playerCount.value);
@@ -97,6 +100,7 @@ function startGame(event) {
   currentRound = 1;
   phase = "idle";
   selectedSuit = null;
+  lastScoredRound = null;
   setupScreen.hidden = true;
   gameScreen.hidden = false;
   renderGame();
@@ -105,9 +109,16 @@ function startGame(event) {
 
 function renderGame() {
   roundNumber.textContent = currentRound;
+  renderCorrectionControls();
   renderSuitPicker();
   renderPlayerCards();
   renderRoundState();
+}
+
+function renderCorrectionControls() {
+  const canCorrect = Boolean(lastScoredRound);
+  undoRoundButton.hidden = !canCorrect;
+  winnerUndoRound.hidden = !canCorrect;
 }
 
 function renderSuitPicker() {
@@ -416,6 +427,12 @@ function updateScores() {
   if (phase !== "choosing" || !validity.valid) return;
   const multiplier = selectedSuit === "hearts" ? 2 : 1;
 
+  lastScoredRound = {
+    round: currentRound,
+    suit: selectedSuit,
+    players: players.map((player) => ({ ...player })),
+  };
+
   players.forEach((player) => {
     if (player.passed) {
       player.lastChange = 0;
@@ -430,15 +447,41 @@ function updateScores() {
 
   phase = "idle";
   const winners = players.filter((player) => player.score === 0);
-  renderGame();
 
   if (winners.length > 0) {
+    renderGame();
     showWinner(winners);
   } else {
     currentRound += 1;
-    roundNumber.textContent = currentRound;
-    startRoundButton.textContent = "Começar próxima ronda";
+    renderGame();
   }
+}
+
+function correctLastRound() {
+  if (!lastScoredRound) return;
+
+  const hasNewRoundInProgress = phase === "choosing";
+  if (
+    hasNewRoundInProgress &&
+    !window.confirm(
+      "A ronda atual já foi iniciada. Os dados introduzidos nessa ronda serão descartados. Continuar?",
+    )
+  ) {
+    return;
+  }
+
+  if (winnerDialog.open) winnerDialog.close();
+
+  const snapshot = lastScoredRound;
+  currentRound = snapshot.round;
+  selectedSuit = snapshot.suit;
+  players = snapshot.players.map((player) => ({ ...player }));
+  phase = "choosing";
+  lastScoredRound = null;
+  renderGame();
+  roundMessage.textContent =
+    "Ronda reaberta. Corrige os dados e volta a atualizar a pontuação.";
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function showWinner(winners) {
@@ -465,6 +508,7 @@ function resetGame() {
   players = [];
   selectedSuit = null;
   phase = "idle";
+  lastScoredRound = null;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -472,6 +516,7 @@ playerCount.addEventListener("change", renderNameFields);
 setupForm.addEventListener("submit", startGame);
 startRoundButton.addEventListener("click", startRound);
 updateScoresButton.addEventListener("click", updateScores);
+undoRoundButton.addEventListener("click", correctLastRound);
 newGameButton.addEventListener("click", () => {
   if (window.confirm("Começar um novo jogo? A pontuação atual será apagada."))
     resetGame();
@@ -481,5 +526,6 @@ suitButtons.forEach((button) => {
 });
 winnerNewGame.addEventListener("click", resetGame);
 winnerClose.addEventListener("click", () => winnerDialog.close());
+winnerUndoRound.addEventListener("click", correctLastRound);
 
 renderNameFields();

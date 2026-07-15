@@ -21,6 +21,8 @@ compilar nada.
 - A aplicação preenche os valores restantes quando só existe uma solução
   matemática possível.
 - Uma pontuação que chegue ou ultrapasse o zero é fixada em zero e vence o jogo.
+- A última ronda pontuada pode ser reaberta para corrigir o trunfo, as vazas ou
+  os passes, mesmo depois de a ronda seguinte já ter sido iniciada.
 
 ## GitHub Pages
 
