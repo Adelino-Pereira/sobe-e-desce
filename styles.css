@@ -587,6 +587,18 @@ select:focus,
   color: var(--red);
 }
 
+.pass-status {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.pass-status--required {
+  color: #a83a35;
+}
+
 .round-controls {
   display: flex;
   align-items: center;

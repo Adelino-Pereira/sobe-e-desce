@@ -1,5 +1,6 @@
 const TOTAL_TRICKS = 5;
 const STARTING_SCORE = 20;
+const MAX_CONSECUTIVE_PASSES = 2;
 const STORAGE_KEY = "sobe-desce-active-game-v1";
 const SUIT_NAMES = {
   spades: "Espadas",
@@ -111,6 +112,7 @@ function startGame(event) {
     score: STARTING_SCORE,
     tricks: null,
     passed: false,
+    consecutivePasses: 0,
     autoFilled: false,
     lastChange: null,
   }));
@@ -160,10 +162,24 @@ function renderPlayerCards() {
 
     const controlsEnabled =
       phase === "choosing" && Boolean(selectedSuit) && !player.passed;
+    const consecutivePasses = player.consecutivePasses ?? 0;
     const passEnabled =
-      phase === "choosing" && Boolean(selectedSuit) && selectedSuit !== "clubs";
+      phase === "choosing" &&
+      Boolean(selectedSuit) &&
+      selectedSuit !== "clubs" &&
+      (player.passed || consecutivePasses < MAX_CONSECUTIVE_PASSES);
     const inputValue = player.tricks ?? "";
     const changeText = formatScoreChange(player.lastChange);
+    const passStatus = formatPassStatus(player);
+    const passButtonText = player.passed
+      ? "Passou"
+      : consecutivePasses >= MAX_CONSECUTIVE_PASSES
+        ? "Jogar"
+        : "Passar";
+    const passLabel =
+      consecutivePasses >= MAX_CONSECUTIVE_PASSES && !player.passed
+        ? `${player.name} tem de jogar nesta ronda`
+        : `${player.passed ? "Anular o passe de" : "Passar a ronda com"} ${player.name}`;
 
     card.innerHTML = `
       <div class="player-info">
@@ -176,6 +192,7 @@ function renderPlayerCards() {
           <span>pontos</span>
           ${changeText}
         </div>
+        ${passStatus ? `<div class="pass-status ${consecutivePasses >= MAX_CONSECUTIVE_PASSES ? "pass-status--required" : ""}">${passStatus}</div>` : ""}
       </div>
       <div class="round-controls">
         <div class="trick-control" aria-label="Vazas ganhas por ${escapeAttribute(player.name)}">
@@ -193,8 +210,8 @@ function renderPlayerCards() {
           />
           <button class="stepper-button" type="button" data-action="increment" aria-label="Aumentar as vazas de ${escapeAttribute(player.name)}" ${controlsEnabled ? "" : "disabled"}>+</button>
         </div>
-        <button class="pass-button" type="button" aria-pressed="${player.passed}" ${passEnabled ? "" : "disabled"}>
-          ${player.passed ? "Passou" : "Passar"}
+        <button class="pass-button" type="button" aria-label="${escapeAttribute(passLabel)}" aria-pressed="${player.passed}" ${passEnabled ? "" : "disabled"}>
+          ${passButtonText}
         </button>
       </div>
     `;
@@ -230,6 +247,22 @@ function formatScoreChange(change) {
   if (change === 0) return '<span class="score-change">sem alteração</span>';
   const className = change < 0 ? "score-change is-negative" : "score-change";
   return `<span class="${className}">${change > 0 ? "+" : ""}${change}</span>`;
+}
+
+function formatPassStatus(player) {
+  const completedPasses = player.consecutivePasses ?? 0;
+  const pendingPass = phase === "choosing" && player.passed ? 1 : 0;
+  const effectivePasses = completedPasses + pendingPass;
+
+  if (phase === "choosing" && !player.passed && completedPasses >= MAX_CONSECUTIVE_PASSES) {
+    return "Tem de jogar nesta ronda";
+  }
+  if (phase === "choosing" && player.passed && effectivePasses >= MAX_CONSECUTIVE_PASSES) {
+    return "2.º passe consecutivo · depois tem de jogar";
+  }
+  if (effectivePasses === 1) return "1.º passe consecutivo";
+  if (effectivePasses >= MAX_CONSECUTIVE_PASSES) return "Limite de passes atingido";
+  return "";
 }
 
 function startRound() {
@@ -299,6 +332,9 @@ function togglePass(playerId) {
   if (selectedSuit === "clubs") return;
   const player = players.find((item) => item.id === playerId);
   if (!player) return;
+  if (!player.passed && (player.consecutivePasses ?? 0) >= MAX_CONSECUTIVE_PASSES) {
+    return;
+  }
 
   player.passed = !player.passed;
   player.tricks = null;
@@ -361,11 +397,19 @@ function getRoundValidity() {
   const total = getEnteredTotal();
   const allEntered =
     active.length > 0 && active.every((player) => player.tricks !== null);
+  const invalidPass = players.find(
+    (player) => player.passed && (player.consecutivePasses ?? 0) >= MAX_CONSECUTIVE_PASSES,
+  );
 
   if (!selectedSuit)
     return {
       valid: false,
       message: "Escolhe o trunfo para registar as vazas.",
+    };
+  if (invalidPass)
+    return {
+      valid: false,
+      message: `${invalidPass.name} já passou duas vezes consecutivas e tem de jogar nesta ronda.`,
     };
   if (active.length === 0)
     return {
@@ -469,9 +513,15 @@ function updateScores() {
 
   players.forEach((player) => {
     const scoreBefore = player.score;
+    const passStreakBefore = player.consecutivePasses ?? 0;
     if (player.passed) {
       player.lastChange = 0;
+      player.consecutivePasses = Math.min(
+        MAX_CONSECUTIVE_PASSES,
+        passStreakBefore + 1,
+      );
     } else {
+      player.consecutivePasses = 0;
       player.lastChange =
         player.tricks === 0 ? 5 * multiplier : -player.tricks * multiplier;
       player.score = Math.max(0, player.score + player.lastChange);
@@ -484,6 +534,8 @@ function updateScores() {
       passed: player.passed,
       change: player.lastChange,
       scoreAfter: player.score,
+      passStreakBefore,
+      passStreakAfter: player.consecutivePasses,
     });
   });
 
@@ -571,10 +623,20 @@ function openPlayerHistory(playerId) {
 }
 
 function renderPlayerHistory(player) {
+  let derivedPassStreak = 0;
   const records = roundHistory
     .map((entry) => {
       const result = entry.players.find((item) => item.id === player.id);
-      return result ? { ...result, round: entry.round, suit: entry.suit } : null;
+      if (!result) return null;
+      derivedPassStreak = result.passed ? derivedPassStreak + 1 : 0;
+      return {
+        ...result,
+        passStreakAfter: Number.isInteger(result.passStreakAfter)
+          ? result.passStreakAfter
+          : derivedPassStreak,
+        round: entry.round,
+        suit: entry.suit,
+      };
     })
     .filter(Boolean);
 
@@ -726,7 +788,10 @@ function renderHistoryList(records) {
 }
 
 function formatHistoryResult(record) {
-  if (record.passed) return "Passou";
+  if (record.passed) {
+    const streak = record.passStreakAfter;
+    return streak ? `Passou (${streak}.º consecutivo)` : "Passou";
+  }
   return `${record.tricks} ${record.tricks === 1 ? "vaza" : "vazas"}`;
 }
 
@@ -770,12 +835,17 @@ function restoreSavedGame() {
       return false;
     }
 
-    players = saved.players;
+    roundHistory = Array.isArray(saved.roundHistory) ? saved.roundHistory : [];
+    players = saved.players.map((player) => ({
+      ...player,
+      consecutivePasses: Number.isInteger(player.consecutivePasses)
+        ? player.consecutivePasses
+        : deriveConsecutivePasses(player.id, roundHistory),
+    }));
     currentRound = Number.isInteger(saved.currentRound) ? saved.currentRound : 1;
     phase = saved.phase === "choosing" ? "choosing" : "idle";
     selectedSuit = SUIT_NAMES[saved.selectedSuit] ? saved.selectedSuit : null;
-    lastScoredRound = saved.lastScoredRound ?? null;
-    roundHistory = Array.isArray(saved.roundHistory) ? saved.roundHistory : [];
+    lastScoredRound = normalizeCorrectionSnapshot(saved.lastScoredRound);
     setupScreen.hidden = true;
     gameScreen.hidden = false;
     renderGame();
@@ -787,6 +857,31 @@ function restoreSavedGame() {
     localStorage.removeItem(STORAGE_KEY);
     return false;
   }
+}
+
+function deriveConsecutivePasses(playerId, history) {
+  let count = 0;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const result = history[index].players?.find((item) => item.id === playerId);
+    if (!result) continue;
+    if (!result.passed) break;
+    count += 1;
+  }
+  return Math.min(MAX_CONSECUTIVE_PASSES, count);
+}
+
+function normalizeCorrectionSnapshot(snapshot) {
+  if (!snapshot?.players) return null;
+  const priorHistory = roundHistory.slice(0, snapshot.historyLength ?? roundHistory.length);
+  return {
+    ...snapshot,
+    players: snapshot.players.map((player) => ({
+      ...player,
+      consecutivePasses: Number.isInteger(player.consecutivePasses)
+        ? player.consecutivePasses
+        : deriveConsecutivePasses(player.id, priorHistory),
+    })),
+  };
 }
 
 playerCount.addEventListener("change", renderNameFields);

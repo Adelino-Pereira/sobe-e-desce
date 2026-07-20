@@ -225,6 +225,84 @@ assert(
   "Correcting the latest round should remove its old history entry until it is reapplied.",
 );
 
-console.log("Browser smoke test passed: scoring, history, correction, and local persistence.");
+const passLimit = await evaluate(`(() => {
+  window.confirm = () => true;
+  document.querySelector("#new-game-button").click();
+  const count = document.querySelector("#player-count");
+  count.value = "3";
+  count.dispatchEvent(new Event("change", { bubbles: true }));
+  const names = document.querySelectorAll(".name-input");
+  names[0].value = "Ana";
+  names[1].value = "Bia";
+  names[2].value = "Cris";
+  document.querySelector("#setup-form").requestSubmit();
+
+  const scoreRoundWithAnaPassing = (suit) => {
+    document.querySelector("#start-round-button").click();
+    document.querySelector('[data-suit="' + suit + '"]').click();
+    document.querySelectorAll(".pass-button")[0].click();
+    const inputs = document.querySelectorAll(".trick-input");
+    inputs[1].value = "2";
+    inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
+    document.querySelector("#update-scores-button").click();
+  };
+
+  scoreRoundWithAnaPassing("spades");
+  const streakAfterOne = JSON.parse(
+    localStorage.getItem("sobe-desce-active-game-v1"),
+  ).players[0].consecutivePasses;
+
+  scoreRoundWithAnaPassing("diamonds");
+  const streakAfterTwo = JSON.parse(
+    localStorage.getItem("sobe-desce-active-game-v1"),
+  ).players[0].consecutivePasses;
+
+  document.querySelector("#start-round-button").click();
+  document.querySelector('[data-suit="spades"]').click();
+  const forcedPassButton = document.querySelectorAll(".pass-button")[0];
+  const forcedToPlay = {
+    disabled: forcedPassButton.disabled,
+    label: forcedPassButton.textContent.trim(),
+    status: document.querySelector('[data-player-id="0"] .pass-status').textContent,
+  };
+
+  let inputs = document.querySelectorAll(".trick-input");
+  inputs[0].value = "0";
+  inputs[0].dispatchEvent(new Event("input", { bubbles: true }));
+  inputs[1].value = "2";
+  inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
+  document.querySelector("#update-scores-button").click();
+  const streakAfterPlaying = JSON.parse(
+    localStorage.getItem("sobe-desce-active-game-v1"),
+  ).players[0].consecutivePasses;
+
+  document.querySelector("#start-round-button").click();
+  document.querySelector('[data-suit="diamonds"]').click();
+  const passEnabledAfterReset = !document.querySelectorAll(".pass-button")[0].disabled;
+
+  document.querySelectorAll(".player-history-button")[0].click();
+  const historyText = document.querySelector("#history-list").textContent;
+  document.querySelector("#history-close").click();
+
+  return {
+    streakAfterOne,
+    streakAfterTwo,
+    forcedToPlay,
+    streakAfterPlaying,
+    passEnabledAfterReset,
+    historyText,
+  };
+})()`);
+
+assert(passLimit.streakAfterOne === 1, "The first completed pass should start the streak.");
+assert(passLimit.streakAfterTwo === 2, "The second consecutive pass should reach the limit.");
+assert(passLimit.forcedToPlay.disabled, "A player should not be able to pass a third consecutive round.");
+assert(passLimit.forcedToPlay.label === "Jogar", "The disabled pass control should clearly say that the player must play.");
+assert(passLimit.forcedToPlay.status.includes("Tem de jogar"), "The player card should explain why passing is blocked.");
+assert(passLimit.streakAfterPlaying === 0, "Participating in a round should reset the pass streak, even with zero tricks.");
+assert(passLimit.passEnabledAfterReset, "Passing should be available again in the next round.");
+assert(passLimit.historyText.includes("2.º consecutivo"), "Player history should identify the second consecutive pass.");
+
+console.log("Browser smoke test passed: scoring, history, persistence, correction, and pass limits.");
 await command("Page.close");
 socket.close();

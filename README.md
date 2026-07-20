@@ -17,6 +17,8 @@ compilar nada.
 - Copas duplica as alterações de pontuação.
 - Paus obriga todos os jogadores a jogar, por isso não é possível passar.
 - Quem passa mantém a pontuação nessa ronda.
+- Um jogador só pode passar duas rondas consecutivas. Depois tem de jogar uma
+  ronda; ao jogar, o limite de passes é reposto.
 - As cinco vazas têm de ser atribuídas antes de atualizar a pontuação.
 - A aplicação preenche os valores restantes quando só existe uma solução
   matemática possível.
