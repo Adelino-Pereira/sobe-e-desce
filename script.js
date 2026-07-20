@@ -1,10 +1,17 @@
 const TOTAL_TRICKS = 5;
 const STARTING_SCORE = 20;
+const STORAGE_KEY = "sobe-desce-active-game-v1";
 const SUIT_NAMES = {
   spades: "Espadas",
   hearts: "Copas",
   clubs: "Paus",
   diamonds: "Ouros",
+};
+const SUIT_SYMBOLS = {
+  spades: "♠",
+  hearts: "♥",
+  clubs: "♣",
+  diamonds: "♦",
 };
 
 const setupScreen = document.querySelector("#setup-screen");
@@ -30,12 +37,22 @@ const winnerMessage = document.querySelector("#winner-message");
 const winnerNewGame = document.querySelector("#winner-new-game");
 const winnerClose = document.querySelector("#winner-close");
 const winnerUndoRound = document.querySelector("#winner-undo-round");
+const historyDialog = document.querySelector("#history-dialog");
+const historyTitle = document.querySelector("#history-title");
+const historyCurrentScore = document.querySelector("#history-current-score");
+const historyClose = document.querySelector("#history-close");
+const historyChartScroll = document.querySelector("#history-chart-scroll");
+const historyChart = document.querySelector("#history-chart");
+const historyChartDetail = document.querySelector("#history-chart-detail");
+const historyList = document.querySelector("#history-list");
+const historyEmpty = document.querySelector("#history-empty");
 
 let players = [];
 let currentRound = 1;
 let phase = "idle";
 let selectedSuit = null;
 let lastScoredRound = null;
+let roundHistory = [];
 
 function renderNameFields() {
   const count = Number(playerCount.value);
@@ -101,6 +118,7 @@ function startGame(event) {
   phase = "idle";
   selectedSuit = null;
   lastScoredRound = null;
+  roundHistory = [];
   setupScreen.hidden = true;
   gameScreen.hidden = false;
   renderGame();
@@ -113,6 +131,7 @@ function renderGame() {
   renderSuitPicker();
   renderPlayerCards();
   renderRoundState();
+  saveGame();
 }
 
 function renderCorrectionControls() {
@@ -148,7 +167,10 @@ function renderPlayerCards() {
 
     card.innerHTML = `
       <div class="player-info">
-        <h3 class="player-name">${escapeHtml(player.name)}</h3>
+        <button class="player-history-button" type="button" aria-label="Ver histórico de ${escapeAttribute(player.name)}">
+          <span class="player-name">${escapeHtml(player.name)}</span>
+          <span class="history-indicator" aria-hidden="true">↗</span>
+        </button>
         <div class="score-line">
           <strong class="score-value">${player.score}</strong>
           <span>pontos</span>
@@ -190,6 +212,9 @@ function renderPlayerCards() {
     card
       .querySelector(".pass-button")
       .addEventListener("click", () => togglePass(player.id));
+    card
+      .querySelector(".player-history-button")
+      .addEventListener("click", () => openPlayerHistory(player.id));
     playerCards.append(card);
   });
 }
@@ -252,6 +277,7 @@ function handleTrickInput(playerId, rawValue) {
   autoCompleteTricks(playerId);
   syncPlayerCardInputs();
   renderRoundState();
+  saveGame();
 }
 
 function stepTricks(playerId, action) {
@@ -266,6 +292,7 @@ function stepTricks(playerId, action) {
   autoCompleteTricks(playerId);
   renderPlayerCards();
   renderRoundState();
+  saveGame();
 }
 
 function togglePass(playerId) {
@@ -279,6 +306,7 @@ function togglePass(playerId) {
   autoCompleteTricks();
   renderPlayerCards();
   renderRoundState();
+  saveGame();
 }
 
 function autoCompleteTricks(lastEditedId = null) {
@@ -430,19 +458,36 @@ function updateScores() {
     round: currentRound,
     suit: selectedSuit,
     players: players.map((player) => ({ ...player })),
+    historyLength: roundHistory.length,
+  };
+
+  const historyEntry = {
+    round: currentRound,
+    suit: selectedSuit,
+    players: [],
   };
 
   players.forEach((player) => {
+    const scoreBefore = player.score;
     if (player.passed) {
       player.lastChange = 0;
-      return;
+    } else {
+      player.lastChange =
+        player.tricks === 0 ? 5 * multiplier : -player.tricks * multiplier;
+      player.score = Math.max(0, player.score + player.lastChange);
     }
 
-    const change =
-      player.tricks === 0 ? 5 * multiplier : -player.tricks * multiplier;
-    player.lastChange = change;
-    player.score = Math.max(0, player.score + change);
+    historyEntry.players.push({
+      id: player.id,
+      scoreBefore,
+      tricks: player.tricks,
+      passed: player.passed,
+      change: player.lastChange,
+      scoreAfter: player.score,
+    });
   });
+
+  roundHistory.push(historyEntry);
 
   phase = "idle";
   const winners = players.filter((player) => player.score === 0);
@@ -475,6 +520,7 @@ function correctLastRound() {
   currentRound = snapshot.round;
   selectedSuit = snapshot.suit;
   players = snapshot.players.map((player) => ({ ...player }));
+  roundHistory = roundHistory.slice(0, snapshot.historyLength);
   phase = "choosing";
   lastScoredRound = null;
   renderGame();
@@ -508,7 +554,239 @@ function resetGame() {
   selectedSuit = null;
   phase = "idle";
   lastScoredRound = null;
+  roundHistory = [];
+  localStorage.removeItem(STORAGE_KEY);
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function openPlayerHistory(playerId) {
+  const player = players.find((item) => item.id === playerId);
+  if (!player) return;
+
+  renderPlayerHistory(player);
+  historyDialog.showModal();
+  requestAnimationFrame(() => {
+    historyChartScroll.scrollLeft = historyChartScroll.scrollWidth;
+  });
+}
+
+function renderPlayerHistory(player) {
+  const records = roundHistory
+    .map((entry) => {
+      const result = entry.players.find((item) => item.id === player.id);
+      return result ? { ...result, round: entry.round, suit: entry.suit } : null;
+    })
+    .filter(Boolean);
+
+  historyTitle.textContent = player.name;
+  historyCurrentScore.textContent = `${player.score} pontos neste momento`;
+  historyEmpty.hidden = records.length > 0;
+  renderHistoryChart(records, player.score);
+  renderHistoryList(records);
+}
+
+function renderHistoryChart(records, currentScore) {
+  const initialScore = records[0]?.scoreBefore ?? currentScore;
+  const points = [
+    { round: 0, score: initialScore, record: null },
+    ...records.map((record) => ({
+      round: record.round,
+      score: record.scoreAfter,
+      record,
+    })),
+  ];
+  const width = Math.max(340, (points.length - 1) * 64 + 80);
+  const height = 220;
+  const left = 38;
+  const right = 18;
+  const top = 28;
+  const bottom = 42;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const maxScore = Math.max(STARTING_SCORE, ...points.map((point) => point.score));
+  const axisMax = Math.max(5, Math.ceil(maxScore / 5) * 5);
+  const xFor = (index) =>
+    points.length === 1
+      ? left + plotWidth / 2
+      : left + (index / (points.length - 1)) * plotWidth;
+  const yFor = (score) => top + ((axisMax - score) / axisMax) * plotHeight;
+  const gridValues = [...new Set([axisMax, Math.round(axisMax / 2), 0])];
+
+  const grid = gridValues
+    .map((value) => {
+      const y = yFor(value);
+      const lineClass = value === 0 ? "history-goal-line" : "history-grid-line";
+      return `
+        <line class="${lineClass}" x1="${left}" y1="${y}" x2="${width - right}" y2="${y}"></line>
+        <text class="history-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${value}</text>
+      `;
+    })
+    .join("");
+
+  const segments = records
+    .map((record, index) => {
+      const start = points[index];
+      const end = points[index + 1];
+      const direction =
+        record.change < 0 ? "down" : record.change > 0 ? "up" : "flat";
+      return `<line class="history-segment history-segment--${direction}" x1="${xFor(index)}" y1="${yFor(start.score)}" x2="${xFor(index + 1)}" y2="${yFor(end.score)}"></line>`;
+    })
+    .join("");
+
+  const circles = points
+    .map((point, index) => {
+      const x = xFor(index);
+      const y = yFor(point.score);
+      const recordIndex = index - 1;
+      const direction = !point.record
+        ? "start"
+        : point.record.change < 0
+          ? "down"
+          : point.record.change > 0
+            ? "up"
+            : "flat";
+      const label = point.record
+        ? `Ronda ${point.round}: ${formatHistoryResult(point.record)}, ${formatSignedChange(point.record.change)} pontos, total ${point.score}`
+        : `Início: ${point.score} pontos`;
+      const roundLabel = point.record ? `R${point.round}` : "Início";
+      const suitMarker = point.record
+        ? `<text class="history-suit-marker ${isRedSuit(point.record.suit) ? "history-suit-marker--red" : ""}" x="${x}" y="${Math.max(15, y - 12)}" text-anchor="middle">${SUIT_SYMBOLS[point.record.suit]}</text>`
+        : "";
+      return `
+        ${suitMarker}
+        <circle class="history-point history-point--${direction}" cx="${x}" cy="${y}" r="6" tabindex="0" role="button" data-record-index="${recordIndex}" aria-label="${escapeAttribute(label)}"><title>${escapeHtml(label)}</title></circle>
+        <text class="history-axis-label" x="${x}" y="${height - 16}" text-anchor="middle">${roundLabel}</text>
+      `;
+    })
+    .join("");
+
+  historyChart.innerHTML = `
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico da evolução da pontuação">
+      ${grid}
+      ${segments}
+      ${circles}
+    </svg>
+  `;
+
+  const showDetail = (recordIndex) => {
+    historyChartDetail.textContent =
+      recordIndex < 0
+        ? `Início do jogo · ${initialScore} pontos`
+        : formatHistoryDetail(records[recordIndex]);
+  };
+
+  historyChart.querySelectorAll(".history-point").forEach((point) => {
+    const showPoint = () => showDetail(Number(point.dataset.recordIndex));
+    point.addEventListener("click", showPoint);
+    point.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showPoint();
+      }
+    });
+  });
+
+  if (records.length > 0) {
+    showDetail(records.length - 1);
+  } else {
+    showDetail(-1);
+  }
+}
+
+function renderHistoryList(records) {
+  historyList.replaceChildren();
+
+  [...records].reverse().forEach((record) => {
+    const item = document.createElement("li");
+    const changeClass =
+      record.change > 0
+        ? "history-change--up"
+        : record.change === 0
+          ? "history-change--flat"
+          : "";
+    item.className = "history-round-card";
+    item.innerHTML = `
+      <div class="history-round-heading">
+        <span class="history-round-number">Ronda ${record.round}</span>
+        <span class="history-suit ${isRedSuit(record.suit) ? "history-suit--red" : ""}">
+          <span class="history-suit-symbol" aria-hidden="true">${SUIT_SYMBOLS[record.suit]}</span>
+          ${SUIT_NAMES[record.suit]}
+        </span>
+      </div>
+      <div class="history-round-result">
+        <div>
+          <div class="history-result-text">${formatHistoryResult(record)}</div>
+          <div class="history-score-path">${record.scoreBefore} → ${record.scoreAfter} pontos</div>
+        </div>
+        <span class="history-change ${changeClass}">${formatSignedChange(record.change)}</span>
+      </div>
+    `;
+    historyList.append(item);
+  });
+}
+
+function formatHistoryResult(record) {
+  if (record.passed) return "Passou";
+  return `${record.tricks} ${record.tricks === 1 ? "vaza" : "vazas"}`;
+}
+
+function formatSignedChange(change) {
+  return change > 0 ? `+${change}` : String(change);
+}
+
+function formatHistoryDetail(record) {
+  return `Ronda ${record.round} · ${SUIT_NAMES[record.suit]} · ${formatHistoryResult(record)} · ${formatSignedChange(record.change)} pontos · ${record.scoreBefore} → ${record.scoreAfter}`;
+}
+
+function isRedSuit(suit) {
+  return suit === "hearts" || suit === "diamonds";
+}
+
+function saveGame() {
+  if (players.length === 0) return;
+
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        players,
+        currentRound,
+        phase,
+        selectedSuit,
+        lastScoredRound,
+        roundHistory,
+      }),
+    );
+  } catch {
+    // The game remains fully usable if browser storage is unavailable.
+  }
+}
+
+function restoreSavedGame() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved?.version !== 1 || !Array.isArray(saved.players) || saved.players.length < 2) {
+      return false;
+    }
+
+    players = saved.players;
+    currentRound = Number.isInteger(saved.currentRound) ? saved.currentRound : 1;
+    phase = saved.phase === "choosing" ? "choosing" : "idle";
+    selectedSuit = SUIT_NAMES[saved.selectedSuit] ? saved.selectedSuit : null;
+    lastScoredRound = saved.lastScoredRound ?? null;
+    roundHistory = Array.isArray(saved.roundHistory) ? saved.roundHistory : [];
+    setupScreen.hidden = true;
+    gameScreen.hidden = false;
+    renderGame();
+
+    const winners = players.filter((player) => player.score === 0);
+    if (phase === "idle" && winners.length > 0) showWinner(winners);
+    return true;
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+    return false;
+  }
 }
 
 playerCount.addEventListener("change", renderNameFields);
@@ -526,5 +804,10 @@ suitButtons.forEach((button) => {
 winnerNewGame.addEventListener("click", resetGame);
 winnerClose.addEventListener("click", () => winnerDialog.close());
 winnerUndoRound.addEventListener("click", correctLastRound);
+historyClose.addEventListener("click", () => historyDialog.close());
+historyDialog.addEventListener("click", (event) => {
+  if (event.target === historyDialog) historyDialog.close();
+});
 
 renderNameFields();
+restoreSavedGame();

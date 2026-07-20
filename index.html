@@ -127,6 +127,36 @@
           <button id="winner-close" class="button button--ghost" type="button">Ver quadro de pontuação</button>
         </div>
       </dialog>
+
+      <dialog id="history-dialog" class="history-dialog" aria-labelledby="history-title">
+        <div class="history-sheet">
+          <header class="history-header">
+            <div>
+              <p class="eyebrow">Histórico do jogador</p>
+              <h2 id="history-title">Jogador</h2>
+              <p id="history-current-score" class="history-current-score"></p>
+            </div>
+            <button id="history-close" class="icon-button" type="button" aria-label="Fechar histórico" title="Fechar histórico">×</button>
+          </header>
+
+          <section class="history-chart-section" aria-labelledby="history-chart-title">
+            <div class="history-section-heading">
+              <h3 id="history-chart-title">Evolução da pontuação</h3>
+              <span class="history-goal"><span aria-hidden="true"></span> Objetivo: 0</span>
+            </div>
+            <div id="history-chart-scroll" class="history-chart-scroll">
+              <div id="history-chart" class="history-chart"></div>
+            </div>
+            <p id="history-chart-detail" class="history-chart-detail" aria-live="polite"></p>
+          </section>
+
+          <section class="history-rounds" aria-labelledby="history-rounds-title">
+            <h3 id="history-rounds-title">Rondas</h3>
+            <ol id="history-list" class="history-list"></ol>
+            <p id="history-empty" class="history-empty" hidden>Ainda não existem rondas registadas para este jogador.</p>
+          </section>
+        </div>
+      </dialog>
     </main>
 
     <script src="script.js"></script>

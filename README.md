@@ -23,6 +23,10 @@ compilar nada.
 - Uma pontuação que chegue ou ultrapasse o zero é fixada em zero e vence o jogo.
 - A última ronda pontuada pode ser reaberta para corrigir o trunfo, as vazas ou
   os passes, mesmo depois de a ronda seguinte já ter sido iniciada.
+- O nome de cada jogador abre um histórico com um gráfico da evolução da
+  pontuação e o detalhe de todas as rondas.
+- O jogo em curso, incluindo o histórico, é guardado automaticamente no
+  navegador e recuperado depois de atualizar ou fechar a página.
 
 ## GitHub Pages
 

@@ -41,6 +41,12 @@ function assert(condition, message) {
 }
 
 await command("Runtime.enable");
+await command("Emulation.setDeviceMetricsOverride", {
+  width: 390,
+  height: 844,
+  deviceScaleFactor: 1,
+  mobile: true,
+});
 await new Promise((resolve) => setTimeout(resolve, 300));
 
 const setup = await evaluate(`(() => {
@@ -109,6 +115,33 @@ assert(clubRound.autoCompleted === "5", "A zero should autocomplete the other pl
 assert(clubRound.scores.join(",") === "21,9", "Normal scoring should add 5 for zero and deduct tricks won.");
 assert(clubRound.correctionAvailable, "The last scored round should be available for correction.");
 
+const historyPanel = await evaluate(`(() => {
+  document.querySelectorAll(".player-history-button")[0].click();
+  const result = {
+    open: document.querySelector("#history-dialog").open,
+    title: document.querySelector("#history-title").textContent,
+    rounds: document.querySelector("#history-list").children.length,
+    hasChart: Boolean(document.querySelector("#history-chart svg")),
+    points: document.querySelectorAll(".history-point").length,
+    latestDetail: document.querySelector("#history-chart-detail").textContent,
+    layout: (() => {
+      const rect = document.querySelector("#history-dialog").getBoundingClientRect();
+      return { width: rect.width, height: rect.height, bottomGap: innerHeight - rect.bottom };
+    })(),
+  };
+  document.querySelector("#history-close").click();
+  return result;
+})()`);
+
+assert(historyPanel.open, "Clicking a player name should open the history panel.");
+assert(historyPanel.title === "Ada", "The history panel should identify the selected player.");
+assert(historyPanel.rounds === 2, "The history should list both scored rounds.");
+assert(historyPanel.hasChart && historyPanel.points === 3, "The chart should include the starting score and two rounds.");
+assert(historyPanel.latestDetail.includes("Ronda 2"), "The chart should describe its latest point.");
+assert(historyPanel.layout.width <= 390, "The history panel should fit the phone viewport.");
+assert(historyPanel.layout.height < 844, "The history panel should leave context visible above it.");
+assert(Math.abs(historyPanel.layout.bottomGap) < 2, "The mobile history panel should be anchored to the bottom.");
+
 const correctedRound = await evaluate(`(() => {
   document.querySelector("#start-round-button").click();
   document.querySelector('[data-suit="diamonds"]').click();
@@ -145,6 +178,34 @@ assert(correctedRound.correctionConsumed, "The undo should be consumed until cor
 assert(correctedRound.correctedTricks.join(",") === "1,4", "Editing a restored round should recalculate autocompleted tricks.");
 assert(correctedRound.correctedScores.join(",") === "15,10", "Reapplying the corrected round should use the restored scores.");
 
+const savedGame = await evaluate(`(() => {
+  const saved = JSON.parse(localStorage.getItem("sobe-desce-active-game-v1"));
+  return {
+    historyLength: saved.roundHistory.length,
+    scores: saved.players.map((player) => player.score),
+    canCorrect: Boolean(saved.lastScoredRound),
+  };
+})()`);
+
+assert(savedGame.historyLength === 2, "Correcting a round should replace its history entry, not duplicate it.");
+assert(savedGame.scores.join(",") === "15,10", "The corrected scores should be saved locally.");
+assert(savedGame.canCorrect, "The correction snapshot should be persisted.");
+
+await evaluate("location.reload(); true");
+await new Promise((resolve) => setTimeout(resolve, 300));
+
+const restoredGame = await evaluate(`(() => ({
+  setupHidden: document.querySelector("#setup-screen").hidden,
+  round: document.querySelector("#round-number").textContent,
+  scores: [...document.querySelectorAll(".score-value")].map((node) => node.textContent),
+  correctionAvailable: !document.querySelector("#undo-round-button").hidden,
+}))()`);
+
+assert(restoredGame.setupHidden, "Refreshing should restore the active game instead of showing setup.");
+assert(restoredGame.round === "3", "Refreshing should restore the current round.");
+assert(restoredGame.scores.join(",") === "15,10", "Refreshing should restore player scores.");
+assert(restoredGame.correctionAvailable, "Refreshing should preserve the ability to correct the last round.");
+
 const immediateCorrection = await evaluate(`(() => {
   document.querySelector("#undo-round-button").click();
   return {
@@ -159,7 +220,11 @@ assert(immediateCorrection.round === "2", "Immediate correction should reopen th
 assert(immediateCorrection.suit === "true", "Immediate correction should retain the submitted suit.");
 assert(immediateCorrection.tricks.join(",") === "1,4", "Immediate correction should retain the corrected tricks.");
 assert(immediateCorrection.scores.join(",") === "16,14", "Immediate correction should restore the prior scores.");
+assert(
+  (await evaluate('JSON.parse(localStorage.getItem("sobe-desce-active-game-v1")).roundHistory.length')) === 1,
+  "Correcting the latest round should remove its old history entry until it is reapplied.",
+);
 
-console.log("Browser smoke test passed: setup, scoring, locking, and last-round correction.");
+console.log("Browser smoke test passed: scoring, history, correction, and local persistence.");
 await command("Page.close");
 socket.close();
